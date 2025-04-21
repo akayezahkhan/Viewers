@@ -1,5 +1,4 @@
-import React, { useEffect, useRef } from 'react';
-import classnames from 'classnames';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DicomMetadataStore, MODULE_TYPES, useSystem } from '@ohif/core';
 
@@ -10,46 +9,40 @@ import { extensionManager } from '../../App';
 
 import { Button, Icons } from '@ohif/ui-next';
 
-const getLoadButton = (onDrop, text, isDir) => {
-  return (
-    <Dropzone
-      onDrop={onDrop}
-      noDrag
-    >
-      {({ getRootProps, getInputProps }) => (
-        <div {...getRootProps()}>
-          <Button
-            variant="default"
-            className="w-28"
-            disabled={false}
-            onClick={() => {}}
-          >
-            {text}
-            {isDir ? (
-              <input
-                {...getInputProps()}
-                webkitdirectory="true"
-                mozdirectory="true"
-                style={{ display: 'none' }}
-              />
-            ) : (
-              <input
-                {...getInputProps()}
-                style={{ display: 'none' }}
-              />
-            )}
-          </Button>
-        </div>
-      )}
-    </Dropzone>
-  );
-};
-
 type LocalProps = {
   modePath: string;
 };
 
 function Local({ modePath }: LocalProps) {
+  const [fileNames, setFileNames] = useState<string[]>([]);
+  const isManifestLoaded = fileNames.length > 0;
+
+  const getLoadButton = (onDrop, text) => {
+    return (
+      <Dropzone
+        onDrop={onDrop}
+        noDrag
+      >
+        {({ getRootProps, getInputProps }) => (
+          <div {...getRootProps()}>
+            <Button
+              variant="default"
+              className="w-28"
+              disabled={false}
+              onClick={() => {
+                if (isManifestLoaded) {
+                  onDrop();
+                }
+              }}
+            >
+              {text}
+            </Button>
+          </div>
+        )}
+      </Dropzone>
+    );
+  };
+
   const { servicesManager } = useSystem();
   const { customizationService } = servicesManager.services;
   const navigate = useNavigate();
@@ -59,6 +52,15 @@ function Local({ modePath }: LocalProps) {
   const LoadingIndicatorProgress = customizationService.getCustomization(
     'ui.loadingIndicatorProgress'
   );
+  useEffect(() => {
+    fetch('/dicom_files.json')
+      .then(response => response.json())
+      .then(data => {
+        setFileNames(data); // update state
+        console.log('Loaded fileNames:', data);
+      })
+      .catch(error => console.error('Error loading JSON:', error));
+  }, []);
 
   // Initializing the dicom local dataSource
   const dataSourceModules = extensionManager.modules[MODULE_TYPES.DATA_SOURCE];
@@ -79,8 +81,51 @@ function Local({ modePath }: LocalProps) {
     '@ohif/extension-dicom-microscopy'
   );
 
-  const onDrop = async acceptedFiles => {
-    const studies = await filesToStudies(acceptedFiles, dataSource);
+  // const fileNames = [
+  //   '1.2.826.0.1.3680043.8.498.4275877852413620706087033949776426147.dcm',
+  //   '1.2.826.0.1.3680043.8.498.6790281529531735214439939164103595673.dcm',
+  //   '1.2.826.0.1.3680043.8.498.14012196709335913320460390623121005339.dcm',
+  // ];
+
+  // let fileNames = [];
+  // fetch('/public/dicoms/manifest.json')
+  //   .then(response => response.json())
+  //   .then(data => {
+  //     fileNames = data; // data is your array from the JSON file
+  //     console.log(fileNames);
+  //   })
+  //   .catch(error => console.error('Error loading JSON:', error));
+
+  const loadDicomFiles = async () => {
+    if (!fileNames.length) {
+      console.error('File names not loaded yet');
+      return [];
+    }
+
+    const filePromises = fileNames.map(async fileName => {
+      const response = await fetch(
+        /dicoms/Study_1.2.826.0.1.3680043.8.498.78610350547668740347851208464231767134/${fileName}
+      );
+      const blob = await response.blob();
+      return new File([blob], fileName, { type: 'application/dicom' });
+    });
+
+    const fileArray = await Promise.all(filePromises);
+    return fileArray;
+  };
+
+  const onDrop = async () => {
+    const fileArray = await loadDicomFiles();
+    console.log('fileArray');
+    console.log(fileArray);
+    // onDrop(fileArray); // Use your existing function
+
+    const studies = await filesToStudies(fileArray, dataSource);
+    // const studies = await filesToStudies(acceptedFiles, dataSource);
+    // console.log('acceptedFiles');
+    // console.log(acceptedFiles);
+    console.log('studies');
+    console.log(studies);
 
     const query = new URLSearchParams();
 
@@ -106,7 +151,7 @@ function Local({ modePath }: LocalProps) {
     studies.forEach(id => query.append('StudyInstanceUIDs', id));
     query.append('datasources', 'dicomlocal');
 
-    navigate(`/${modePath}?${decodeURIComponent(query.toString())}`);
+    navigate(/${modePath}?${decodeURIComponent(query.toString())});
   };
 
   // Set body style
@@ -143,20 +188,23 @@ function Local({ modePath }: LocalProps) {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <p className="text-primary pt-0 text-xl">
-                      Drag and drop your DICOM files & folders here <br />
-                      to load them locally.
-                    </p>
+                    <p className="text-primary pt-0 text-xl">Click the Open button to view.</p>
                     <p className="text-muted-foreground text-base">
                       Note: Your data remains locally within your browser
                       <br /> and is never uploaded to any server.
                     </p>
+                    <p>Welcome abcd</p>
+
+                    <input
+                      type="text"
+                      placeholder="write here"
+                    ></input>
                   </div>
                 )}
               </div>
               <div className="flex justify-center gap-2 pt-4">
-                {getLoadButton(onDrop, 'Load files', false)}
-                {getLoadButton(onDrop, 'Load folders', true)}
+                {/* {getLoadButton(onDrop, 'Load files', false)} */}
+                {getLoadButton(onDrop, 'Open', true)}
               </div>
             </div>
           </div>
