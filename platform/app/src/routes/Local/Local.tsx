@@ -53,7 +53,7 @@ function Local({ modePath }: LocalProps) {
     'ui.loadingIndicatorProgress'
   );
   useEffect(() => {
-    fetch('/dicom_files.json')
+    fetch('dicom_files.json')
       .then(response => response.json())
       .then(data => {
         setFileNames(data); // update state
